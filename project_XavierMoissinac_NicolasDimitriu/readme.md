@@ -6,6 +6,8 @@
 
 
 For this project, a data pipeline will be set up with Apache Spark for real-time processing, HDFS for data storage, Hive for analysis, and Apache Kafka for data import. Using Python to create simulated data, the objective is to develop an effective system that gathers, saves, analyzes, and processes sensor data. Numerous technical difficulties could come up when working on the project, particularly when integrating diverse parts and making sure they function together seamlessly. It is essential to comprehend these possible problems and how to resolve them in order to guarantee project success and efficient workflow. 
+<br><br>
+Before starting the next section, go to the ```config.md``` to prepare your environment.
 
 ### **Simplified Architecture with Kafka**
 
@@ -34,25 +36,44 @@ import json
 import random
 import time
 
-# Fonction to generate simulated datas
+# Fonction pour générer des données simulées
 def generate_data():
     return {
+        "sensor_id": random.randint(1, 10),  # ID du capteur, pour varier
         "temperature": round(random.uniform(20.0, 30.0), 2),
         "pressure": round(random.uniform(1012.0, 1020.0), 2),
+        "humidity": round(random.uniform(30.0, 70.0), 2),  # Ajout d'un champ d'humidité
         "timestamp": int(time.time())
     }
 
-# Initialize the producter Kafka with the good port
-producer = KafkaProducer(bootstrap_servers=['localhost:9093'], value_serializer=lambda v: json.dumps(v).encode('utf-8'))
+# Fonction de callback pour afficher si le message a été envoyé correctement
+def on_send_success(record_metadata):
+    print(f"Message envoyé avec succès à {record_metadata.topic} partition {record_metadata.partition} à l'offset {record_metadata.offset}")
 
-# Generate and send datas to a topic Kafka
+def on_send_error(excp):
+    print(f"Erreur d'envoi du message : {excp}")
+
+# Initialiser le producteur Kafka avec le bon port
+producer = KafkaProducer(
+    bootstrap_servers=['localhost:9093'],  # Assurez-vous que ce port est correct
+    value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+   acks='all',  # Assurez-vous que Kafka attend la confirmation de tous les réplicas
+    retries=3  # Réessayez 3 fois en cas d'échec
+)
+
+# Générer et envoyer les données vers un topic Kafka
 for _ in range(1000):
     data = generate_data()
-    producer.send('sensor_data', value=data)
+    producer.send('sensor_data', value=data).add_callback(on_send_success).add_errback(on_send_error)
+    print(f"Sent data: {data}")  # Afficher ce qui est envoyé
     time.sleep(1)
 
-# close kafka producer
+# Attendre que tous les messages soient envoyés avant de fermer le producteur
+producer.flush()
+
+# Fermer le producteur Kafka
 producer.close()
+
 ```
 
 
@@ -70,28 +91,49 @@ from kafka import KafkaConsumer
 from hdfs import InsecureClient
 import json
 
-# Initialize the Kafka consumer with the correct address
+# Consommateur Kafka
 consumer = KafkaConsumer(
     'sensor_data',
-    bootstrap_servers=['localhost:9093'], 
+    bootstrap_servers=['localhost:9093'],  # Utilise l'IP du conteneur Kafka
     group_id='sensor_group',
-    value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+    value_deserializer=lambda x: json.loads(x.decode('utf-8')),
+    auto_offset_reset='earliest',
+    enable_auto_commit=True,
 )
 
+# Initialiser le client HDFS avec l'adresse correcte du conteneur Hadoop
+hdfs_client = InsecureClient('http://172.19.0.6:50070', user='hadoop')  # Utiliser 50070 ici pour l'accès WebHDFS
 
-
-# Initialize HDFS client with correct address
-hdfs_client = InsecureClient('http://172.17.0.2:50070', user='hadoop')
-
-
-# Consuming Kafka messages and storing them in HDFS
+# Consommer les messages de Kafka et les stocker dans HDFS
 for message in consumer:
     data = message.value
     try:
-        # Add data to JSON file in append mode
-        hdfs_client.write('/user/iot/sensor_data/sensor_data.json', data=json.dumps(data) + "\n", append=True)
+        # Afficher les données reçues
+        print(f"Received data: {data}")
+
+        # Vérifier si le fichier existe dans HDFS avant d'écrire
+        file_path = '/user/iot/sensor_data/sensor_data.json'
+        try:
+            hdfs_client.status(file_path)  # Vérifie si le fichier existe
+            file_exists = True
+        except FileNotFoundError:
+            file_exists = False
+        
+        # Si le fichier n'existe pas, crée-le et écrit les données
+        if not file_exists:
+            with hdfs_client.write(file_path, overwrite=True) as writer:
+                writer.write(json.dumps(data) + "\n")
+        else:
+            # Ajouter les données dans le fichier JSON en mode append
+            with hdfs_client.write(file_path, append=True) as writer:
+                writer.write(json.dumps(data) + "\n")
+        
+        # Confirmer l'ajout des données dans la console
+        print("Data written to HDFS successfully.")
     except Exception as e:
-        print(f"Error writing to HDFS: {e}")
+        # Afficher l'erreur en cas de problème avec HDFS
+        print(f"Error writing to HDFS: {e}")
+
 ```
 
 
@@ -101,7 +143,7 @@ for message in consumer:
 
 Run the following command to access the Hadoop container:
 
-If you encounter any bugs or issues similar to the ones we faced, I recommend checking the ProblemsAndSolutions.md page.
+If you encounter any bugs or issues similar to the ones we faced, I recommend checking the ```ProblemsAndSolutions.md``` page.
 
 ```bash
 docker exec -it hadoop bash
@@ -131,6 +173,7 @@ Check the content of the file (it will be empty at this stage) with this command
 hdfs dfs -cat /user/iot/sensor_data/sensor_data.json
 ```
 
+After following the steps to create and verify the file in Hadoop's HDFS, you can now see all the data generated in the system.
 
 ### **4. Data Analysis with Hive**
 
@@ -174,16 +217,16 @@ python
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 
-# Initialize Spark
+# Initialiser Spark
 spark = SparkSession.builder.appName("SensorDataAnalysis").getOrCreate()
 
-# Load data from HDFS
-sensor_data_df = spark.read.json("hdfs://localhost:9000/user/iot/sensor_data/sensor_data.json")
+# Charger les données depuis HDFS
+sensor_data_df = spark.read.json("hdfs://172.17.0.2:9000/user/iot/sensor_data/sensor_data.json")
 
-# Detect anomalies (temperature > 28 or pressure < 1015)
+# Détecter les anomalies (température > 28 ou pression < 1015)
 anomalies_df = sensor_data_df.filter((col("temperature") > 28) | (col("pressure") < 1015))
 
-# Display anomalies
+# Afficher les anomalies
 anomalies_df.show()
 ```
 
@@ -201,3 +244,18 @@ anomalies_df.show()
 ---
 
 By simplifying in this way, you retain the basic architecture with Kafka for data ingestion and HDFS for storage, while simplifying data processing with Hive and the option to add Spark if needed. This reduces project complexity while keeping a flexible architecture.
+
+## 6. Challenges Faced in the Big Data Project
+
+The integration of multiple technologies into a real-time data pipeline presented a number of technical difficulties during this project. Below is a synopsis of the primary challenges and the solutions offered:
+
+1. **Docker Container Configuration Issue**:  
+   Communication between the Docker services (Kafka, HDFS, Hive, Spark) was difficult to establish. The solution was to properly configure Docker networks and ensure that the IP addresses and ports were accessible between the containers.
+
+2. **Hive Configuration with HDFS**:  
+   Hive could not connect correctly to HDFS. We resolved this by configuring the environment variables **$HADOOP_HOME** and **$HADOOP_PREFIX** in the Hive container, allowing Hive to access Hadoop and analyze the data.
+
+3. **Writing Data from Kafka to HDFS Issue**:  
+   Errors occurred when Kafka attempted to send data to HDFS. After adjusting the HDFS connection URL and verifying write permissions, we solved the issue by adding error handling mechanisms.
+
+4. **Not having access to SSH was a real problem**
