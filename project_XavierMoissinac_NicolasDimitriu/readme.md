@@ -88,16 +88,38 @@ for message in consumer:
 
 ### **3. Storing Data in HDFS**
 
-The data ingested by Kafka and consumed by the Python script is stored in HDFS under a directory, such as **/user/iot/sensor_data/**.
+#### 1. Connect to the Hadoop Container
 
-Hadoop commands to check the data:
+Run the following command to access the Hadoop container:
 
+If you encounter any bugs or issues similar to the ones we faced, I recommend checking the ProblemsAndSolutions.md page.
+
+```bash
+docker exec -it hadoop bash
 ```
-bash
 
+#### 2. Create an Empty File in HDFS
+
+Use this command to create an empty file in HDFS:
+
+```bash
+hdfs dfs -touchz /user/iot/sensor_data/sensor_data.json
+```
+
+#### 3. Verify the File Exists
+
+List the files in the HDFS directory to ensure the file has been created:
+
+```bash
 hdfs dfs -ls /user/iot/sensor_data/
-hdfs dfs -cat /user/iot/sensor_data/sensor_data.json
+```
 
+#### 4. Read the File's Content
+
+Check the content of the file (it will be empty at this stage) with this command:
+
+```bash
+hdfs dfs -cat /user/iot/sensor_data/sensor_data.json
 ```
 
 
@@ -154,7 +176,7 @@ anomalies_df = sensor_data_df.filter((col("temperature") > 28) | (col("pressure"
 
 # Display anomalies
 anomalies_df.show()
- ```
+```
 
 
 ### **Tools Summary**

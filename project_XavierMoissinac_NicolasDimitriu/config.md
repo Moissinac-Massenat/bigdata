@@ -82,7 +82,8 @@ For Hive, you can use a pre-configured Docker image, often with a MySQL database
     We encountered a problem here when running this code. If you have the same as us try this: 
 
     ```bash
-    docker run -d --name mysql-hive -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=hive -p 3306:3306 mysql/mysql-server:5.7
+    docker rm mysql-hive
+    docker run -d --name mysql-hive-2 -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=hive -p 3307:3306 mysql:5.7
     ```
 
     This will start Hive with MySQL as the backend for metadata.
