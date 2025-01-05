@@ -1,3 +1,12 @@
+<h1 style="text-align: center;font-size: 50px; font-weight: bold;">Projet Big Data</h1>
+
+<h3 style="text-align: center; font-size: 20px; font-weight: bold;">-- by Nicolas Dimitriu and Xavier Moissinac --</h3>
+<br><br>
+
+
+
+For this project, a data pipeline will be set up with Apache Spark for real-time processing, HDFS for data storage, Hive for analysis, and Apache Kafka for data import. Using Python to create simulated data, the objective is to develop an effective system that gathers, saves, analyzes, and processes sensor data. Numerous technical difficulties could come up when working on the project, particularly when integrating diverse parts and making sure they function together seamlessly. It is essential to comprehend these possible problems and how to resolve them in order to guarantee project success and efficient workflow. 
+
 ### **Simplified Architecture with Kafka**
 
 1. **Data Ingestion**:
